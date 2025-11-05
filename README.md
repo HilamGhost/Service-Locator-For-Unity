@@ -1,68 +1,65 @@
-# Service Locator For Unity  
-**Singleton but Better**
+# 💉 Unity Service Locator Pattern
 
-## Table of Contents
-- [About](#about)  
-- [Why Use This](#why-use-this)  
-- [Features](#features)  
-- [Getting Started](#getting-started)  
-  - [Installation](#installation)  
-  - [Basic Usage](#basic-usage)  
-- [API Overview](#api-overview)  
-  - `IService`  
-  - `Service<T>`  
-  - `ServiceLocator`  
-  - `Singleton<T>`  
-- [Example](#example)  
-- [Best Practices](#best-practices)  
-- [Contribution](#contribution)  
-- [License](#license)
+This repository contains a simple, **priority-based Service Locator implementation** for Unity projects. It allows for automatic discovery, ordered initialization, and decoupled access to various Manager or Controller services within the scene.
 
-## About  
-Service Locator For Unity is a lightweight C# library aimed at simplifying the management of global services in Unity projects. It provides an alternative to the classic Singleton pattern—enabling clean service registration, lookup, and optional runtime swapping—while preserving the simplicity of globally accessible systems.
+## 🌟 Core Concepts
 
-## Why Use This  
-In Unity games, you often have systems like AudioManager, InputManager, GameStateManager, etc., which you want globally accessible. However, using many traditional singletons can lead to tight coupling and harder‐to‐test code.
+The system relies on three main components to enforce the Service Locator pattern:
 
-This library allows you to:
-- Register services in one central place.  
-- Access services via interface or concrete type.  
-- Replace implementations (e.g., for testing or modular projects) easily.  
-- Avoid boilerplate singleton‐getters for each system.
+1.  **`IService.cs`**: The core contract for any class that wants to be registered as a service.
+    * Defines `Initialize()` which is called upon registration.
+    * Defines `GetServiceOrder()` for priority-based loading.
+    * Defines `GetServiceType()` to identify the service type for registration.
 
-## Features  
-- A simple interface `IService` to mark services.  
-- Generic base `Service<T>` to help create concrete services.  
-- A `ServiceLocator` class to register, resolve, and optionally unregister services.  
-- A `Singleton<T>` helper to build legacy singleton‐style behaviour if you still need it.  
-- MIT Licensed.
+2.  **`Service<T>.cs`**: An abstract base class that all concrete services must inherit.
+    * It inherits from `MonoBehaviour` (meaning all services must be attached to a GameObject).
+    * It automatically fulfills the `IService` contract by returning its own type (`typeof(T)`) and providing a `ServicePriority` field for setting the load order in the Inspector.
 
-## Getting Started
+3.  **`ServiceLocator.cs`**: The central access point and registration authority.
+    * It is a **Singleton** (assumed via `Singleton<ServiceLocator>`).
+    * In its `Awake()` method, it **automatically discovers** all `IService` instances in the scene.
+    * It registers and initializes services based on their **`ServicePriority`** (lower numbers initialize first).
+    * Provides the static `GetService<T>()` method for retrieving registered services.
 
-### Installation  
-1. Clone or download this repository.  
-2. Copy the `.cs` files (`IService.cs`, `Service.cs`, `ServiceLocator.cs`, `Singleton.cs`) into your Unity project (e.g., into a `Scripts/Framework/ServiceLocator` folder).  
-3. In Unity, ensure the namespace (if any) aligns with your project structure.
+---
 
-### Basic Usage  
+## ⚙️ How Initialization Works
+
+When the `ServiceLocator` is initialized (`Awake`):
+
+1.  It searches the entire scene for all active and inactive `MonoBehaviour` scripts that implement `IService`.
+2.  These services are **ordered** based on the value returned by `GetServiceOrder()` (`ServicePriority`).
+3.  The services are registered one by one into an internal dictionary using their type as the key.
+4.  Immediately after successful registration, the service's `Initialize()` method is called.
+
+This ensures that services with dependencies (e.g., an `AudioService` relying on a `SaveService`) can be initialized in a guaranteed order.
+
+---
+
+## 🛠️ Usage Example
+
+### 1. Define a Concrete Service
+
+Create a script for your service (e.g., `PlayerProfileService`) and attach it to a GameObject in your scene.
+
 ```csharp
-// Define a service interface
-public interface IAudioService : IService
-{
-    void PlaySound(string key);
-}
+using HilamPrototypes;
+using UnityEngine;
 
-// Create a concrete implementation
-public class AudioService : Service<AudioService>, IAudioService
+// T must be the class itself
+public class PlayerProfileService : Service<PlayerProfileService>
 {
-    public void PlaySound(string key)
+    private string _playerName;
+
+    public override void Initialize()
     {
-        // Implementation here
+        // This is called by the ServiceLocator during startup.
+        Debug.Log("PlayerProfileService Initialized.");
+        _playerName = "DefaultPlayer";
+    }
+
+    public string GetPlayerName()
+    {
+        return _playerName;
     }
 }
-
-// At startup (e.g., in an initialization MonoBehaviour)
-ServiceLocator.Register<IAudioService>(new AudioService());
-
-// Later, anywhere in the code
-ServiceLocator.Resolve<IAudioService>().PlaySound("Explosion");
